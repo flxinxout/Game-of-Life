@@ -28,6 +28,10 @@
     .equ PAUSED, 0x00
     .equ RUNNING, 0x01
 	.equ COUNTER, 0x8000
+
+	;; masks
+	.equ 12_DOWNTO_9, 0xF00
+	.equ INITIAL_MASK_LEDS, ox80808080
 	
 	
 
@@ -42,19 +46,71 @@ clear_leds:
 	stw zero, 0(t1); store in 0x2000 (LED1) 0
 	stw zero, 0(t2); store in 0x2004 (LED2) 0
 	stw zero, 0(t3); store in 0x2008 (LED3) 0
-	ret ; we go back to PC
-
+	ret
 
 wait: 
 	addi t1, zero, COUNTER ; store value of counter in t1
 	addi t2, zero, SPEED ; store address of speed in t2
 	ldw t3, 0(t2) ; load speed of game from memory to t3
 	bne t1, zero, decrement ; if t1 is different than 0 then we loop
-	ret ; we go back to PC
+	ret
 
 decrement:
 	sub t1, t1, t3 ; substract the speed of game from the counter value in t1
 	bne t1, zero, decrement ; if t1 is different than 0 then we loop
+	ret
+
+get_gsa:
+	ldw t1, GSA_ID(zero) ;; load GSA ID
+	beq zero, t1, curr_state
+	;; if gsa id = 1 meaning we are using next state gsa
+	addi t1, zero, GSA1 ;; store address of first GSA element
+	add t2, t1, a0  ;; store address for getting the right element
+	ldw v0, 0(t2) ;; load index y from gsa element
+	ret
+	
+curr_state:
+	addi t1, zero, GSA0 ;; store address of first GSA element
+	add t2, t1, a0 ;; store address for getting the right element
+	ldw v0, 0(t2) ;; load index y from gsa element
+	ret
+
+set_gsa:
+	ldw t1, GSA_ID(zero) ;; load GSA ID
+	beq zero, t1, curr_state
+	;; if gsa id = 1 meaning we are using next state gsa
+	addi t1, zero, GSA1
+	add t2, t1, a1 ;; store address for getting the right element
+	stw a0, 0(t2) ;; store the line a0 in the GSA element
+	ret
+
+set_inCurr:
+	addi t1, zero, GSA0 ;; store address of first GSA element
+	add t2, t1, a1 ;; store address for getting the right element
+	stw a0, 0(t2) ;; store the line a0 in the GSA element
+	ret
+
+draw_gsa:
+	ldw t1, GSA_ID(zero) ;; load GSA ID
+	addi t2, zero, zero ;; start an counter for getting all the gsa elements from the current state
+	addi t3, zero, 8 ;; store the last + 1 index
+	blt t2, t3, display_line_leds ;; if the counter is less than 8 then we display the current line
+
+display_line_leds:
+	add a0, zero, t2 ;; store in a0 the correct line for the call of get_gsa
+	addi t4, zero, LEDS ; load the LEDS in t1
+	addi t5, t4, 4 ; load the LEDS in t2
+	addi t6, t4, 4 ; load the LEDS in t3
+	ldw s0, 0(t4)
+	ldw s1, 0(t5)
+	ldw s2, 0(t6)
+	call get_gsa ;; we get in v0 the correct line
+	and s3, v0, 12_DOWNTO_9 ;; get the 4 most significant bits
+	and s4, s0, INITIAL_MASK_LEDS ;; get the bits of the led line
+	
+	
+	
+
 
 font_data:
     .word 0xFC ; 0
