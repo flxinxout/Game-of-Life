@@ -27,11 +27,11 @@
     .equ MIN_SPEED, 1
     .equ PAUSED, 0x00
     .equ RUNNING, 0x01
-	.equ COUNTER, 0x8000
+	.equ COUNTER, 0x7FFF
 
 	;; masks
-	.equ 12_DOWNTO_9, 0xF00
-	.equ INITIAL_MASK_LEDS, ox80808080
+	.equ 12_DOWNTO_9, 0x000F00
+	.equ INITIAL_MASK_LEDS, 0x80808080
 	
 	
 
@@ -92,7 +92,7 @@ set_inCurr:
 
 draw_gsa:
 	ldw t1, GSA_ID(zero) ;; load GSA ID
-	addi t2, zero, zero ;; start an counter for getting all the gsa elements from the current state
+	add t2, zero, zero ;; start an counter for getting all the gsa elements from the current state
 	addi t3, zero, 8 ;; store the last + 1 index
 	blt t2, t3, display_line_leds ;; if the counter is less than 8 then we display the current line
 
@@ -101,13 +101,16 @@ display_line_leds:
 	addi t4, zero, LEDS ; load the LEDS in t1
 	addi t5, t4, 4 ; load the LEDS in t2
 	addi t6, t4, 4 ; load the LEDS in t3
+;;we have to store initial value of s register to put them back after
 	ldw s0, 0(t4)
 	ldw s1, 0(t5)
 	ldw s2, 0(t6)
 	call get_gsa ;; we get in v0 the correct line
-	and s3, v0, 12_DOWNTO_9 ;; get the 4 most significant bits
-	and s4, s0, INITIAL_MASK_LEDS ;; get the bits of the led line
-	
+	andi s3, v0, 12_DOWNTO_9 ;; get the 4 most significant bits9
+	andi s4, s0, INITIAL_MASK_LEDS ;; get the bits of the led line
+	addi t2, t2, 1 ;; increment counter
+
+
 	
 	
 
