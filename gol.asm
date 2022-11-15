@@ -41,6 +41,7 @@ main:
 ;; ---------------------------------------------------------------------------------------------
 ;; ------------------------------------------------------------------------------------------
 
+; BEGIN:clear_leds
 clear_leds:
 	addi t1, zero, LEDS ; load the LEDS in t1
 	addi t2, t1, 4 ; load the LEDS in t2
@@ -49,25 +50,28 @@ clear_leds:
 	stw zero, 0(t2); store in 0x2004 (LED2) 0
 	stw zero, 0(t3); store in 0x2008 (LED3) 0
 	ret
+; END:clear_leds
 
 ;; ---------------------------------------------------------------------------------------------
 ;; ------------------------------------------------------------------------------------------
 
+; BEGIN:wait
 wait: 
 	addi t1, zero, COUNTER ; store value of counter in t1
 	addi t2, zero, SPEED ; store address of speed in t2
 	ldw t3, 0(t2) ; load speed of game from memory to t3
 	bne t1, zero, decrement ; if t1 is different than 0 then we loop
 	ret
+; END:wait
 
 decrement:
 	sub t1, t1, t3 ; substract the speed of game from the counter value in t1
 	bne t1, zero, decrement ; if t1 is different than 0 then we loop
-	ret
 
 ;; ---------------------------------------------------------------------------------------------
 ;; ------------------------------------------------------------------------------------------
 
+; BEGIN:get_gsa
 get_gsa:
 	ldw t1, GSA_ID(zero) ;; load GSA ID
 	beq zero, t1, curr_state
@@ -76,13 +80,14 @@ get_gsa:
 	add t2, t1, a0  ;; store address for getting the right element
 	ldw v0, 0(t2) ;; load index y from gsa element
 	ret
+; END:get_gsa
 	
 curr_state:
 	addi t1, zero, GSA0 ;; store address of first GSA element
 	add t2, t1, a0 ;; store address for getting the right element
 	ldw v0, 0(t2) ;; load index y from gsa element
-	ret
 
+; BEGIN:set_gsa
 set_gsa:
 	ldw t1, GSA_ID(zero) ;; load GSA ID
 	beq zero, t1, curr_state
@@ -91,150 +96,33 @@ set_gsa:
 	add t2, t1, a1 ;; store address for getting the right element
 	stw a0, 0(t2) ;; store the line a0 in the GSA element
 	ret
-
-set_inCurr:
-	addi t1, zero, GSA0 ;; store address of first GSA element
-	add t2, t1, a1 ;; store address for getting the right element
-	stw a0, 0(t2) ;; store the line a0 in the GSA element
-	ret
-
-;; ---------------------------------------------------------------------------------------------
-;; ------------------------------------------------------------------------------------------
-
-draw_gsa:
-	;; store in stack the return address !!
-	ldw t3, GSA_ID(zero) ;; load GSA ID
-
-	add t4, zero, zero ;; start an counter for getting all the gsa elements from the current state
-	addi t5, zero, 8 ;; store the last + 1 index
-
-	addi t6, zero, LEDS ; load the address LEDS in t6
-	addi t7, t6, 4 ; load the address LEDS in t7
-	;; store in stack s0
-	addi s0, t6, 4 ; load the address LEDS in s0
-
-	;; store in stack s1, s2, s3
-	ldw s1, 0(t4) ; store LEDS0
-	ldw s2, 0(t5) ;; store LEDS1
-	ldw s3, 0(t6) ;; store LEDS2
-	;; restore in s0 the last value (don't use it anymore)
-
-	blt t4, t5, display_line_leds ;; if the counter is less than 8 then we display the current line
-
-	;; s0, s1, s2, s3 restore the last values (don't use them anymore)
-	;; go back to current control flow 
-
-display_line_leds:
-	add a0, zero, t2 ;; store in a0 the correct line for the call of get_gsa
-	call get_gsa ;; we get in v0 the correct line
-
-	;; start a for loop from 0 to 11 on the bits of the GSA 
-	addi t6, zero, 12 ;;  store the last + 1 index (11)
-	add t7, zero, zero ;; start an counter for getting all the bits of GSA elements
-
-	;; store in stack s0
-	addi s0, zero, 0x800 ;; mask of 1 bit in MSB for getting the bits of the GSA element (will by shifted by 1)
-
-	blt t7, t6, display_bit_on_led
-	addi t2, t2, 1 ;; increment counter of GSA element
-
-display_bit_on_led:
-	;; get the correct bit
-	addi s3, zero, 4 
-	blt t7, s3, display_on_led_2 ;; if the j index is less than 4 then we display on LEDS2
-	addi s3, zero, 8
-	blt t7, s3, display_on_led_1 ;; if the j index is less than 8 and greater than 3 then we display on LEDS1
-	addi s3, zero, 12
-	blt t7, s3, display_on_led_0 ;; if the j index is less than 12 and greater than 7 then we display on LEDS0
-	
-
-	srl s0, s0, 1 ;; shift mask of GSA bits by 1 (JE SAIS PAS MDR COMMENT FAIRE POUR DIRE 1)
-	addi t7, t7, 1 ;; increment counter of the bits of GSA element
-
-display_on_led_0:	
-display_on_led_1:
-display_on_led_2:
-	;; 
-	
-;; ---------------------------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------------------------
-
-random_gsa:
-	ldw t0, GSA_ID(zero) ;; load GSA ID
-	beq zero, t1, random_gsa_current_0
-	;; if gsa id = 1 meaning we are using next state gsa
-	
-
-random_gsa_current_0:
+; END:set_gsa
 
 ;; ---------------------------------------------------------------------------------------------
 ;; ---------------------------------------------------------------------------------------------
 
+; BEGIN:change_speed
 change_speed:
 	ldw t0, SPEED(zero) ;; load SPEED value in t0
 	beq a0, zero, increment_speed ;; if a0 is 0 then we want to increment the speed
 	;; if a0 is something else, then we want to decrease the speed
-	addi t1, zero, 1 ;; min value of speed
-	beq t1, t0, ;; GO BACK TO CURRENT FLOW !! if the speed if already 1
-	sub t0, t0, 1 ;; increment by 1 the speed of the game if the speed was 9 or less
+	addi t1, zero, MIN_SPEED ;; min value of speed
+	bne t1, t0, decrement_really ;; if the speed if not 1
+	ret
+; END:change_speed
+
+decrement_really:
+	addi t3, zero, 1 
+	sub t0, t0, t3 ;; decrease by 1 the speed of the game if the speed was 10 or less
 	stw t0, SPEED(zero) ;; store new value of speed
-	;; GO TO CURRENT FLOW
 
 increment_speed:
-	addi t1, zero, 10 ;; max value of speed
-	beq t1, t0, ;; GO BACK TO CURRENT FLOW !! if the speed if already 10
+	addi t1, zero, MAX_SPEED ;; max value of speed
+	bne t1, t0, increment_really ;; if the speed if not 10
+
+increment_really:
 	addi t0, t0, 1 ;; increment by 1 the speed of the game if the speed was 9 or less
 	stw t0, SPEED(zero) ;; store new value of speed
-	;; GO TO CURRENT FLOW
-
-;; ---------------------------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------------------------
-
-pause_game:
-	ldw t0, PAUSE(zero) ;; load if game is pause or running
-	nor t1, t0, zero ;; nor the value in t0. If it's 0 nor 0 -> then 1, else if 1 nor 0 -> then 0
-	stw t1, PAUSE(zero) ;; store the new value of pause/running
-	;; RETURN CURRENT FLOW
-
-
-;; ---------------------------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------------------------
-
-change_steps:
-
-
-;; ---------------------------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------------------------
-
-increment_seed:
-	ldw t0, SEED(zero) ;; load the current seed of the game
-	ldw t1, CURR_STATE(zero) ;; load the current state of the game
-	beq t1, INIT, increment_seed_init_case ;; if we are in INIT state
-	beq t1, RAND, increment_seed_rand_case ;; if we are in RAND state
-	;; else we are in RUN state what do we do ??
-	ret
-
-increment_seed_init_case:
-	addi t0, t0, 1 ;; increment the seed by 1
-	;; SUITE
-	ret
-
-increment_seed_rand_case:
-
-;; ---------------------------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------------------------
-
-update_state:
-
-;; ---------------------------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------------------------
-
-select_action:
-
-;; ---------------------------------------------------------------------------------------------
-;; ---------------------------------------------------------------------------------------------
-
-
 	
 
 font_data:
