@@ -86,6 +86,7 @@ curr_state:
 	addi t1, zero, GSA0 ;; store address of first GSA element
 	add t2, t1, a0 ;; store address for getting the right element
 	ldw v0, 0(t2) ;; load index y from gsa element
+	ret
 
 ; BEGIN:set_gsa
 set_gsa:
@@ -107,23 +108,63 @@ change_speed:
 	beq a0, zero, increment_speed ;; if a0 is 0 then we want to increment the speed
 	;; if a0 is something else, then we want to decrease the speed
 	addi t1, zero, MIN_SPEED ;; min value of speed
-	bne t1, t0, decrement_really ;; if the speed if not 1
+	blt t1, t0, decrement_really ;; if the speed is greater than 1
 	ret
 ; END:change_speed
 
 decrement_really:
-	addi t3, zero, 1 
+	addi t3, zero, 1
+	addi t0, t0, -1 
 	sub t0, t0, t3 ;; decrease by 1 the speed of the game if the speed was 10 or less
 	stw t0, SPEED(zero) ;; store new value of speed
+	ret
 
 increment_speed:
 	addi t1, zero, MAX_SPEED ;; max value of speed
-	bne t1, t0, increment_really ;; if the speed if not 10
+	blt t0, t1, increment_really ;; if the speed if less than 10
+	ret
 
 increment_really:
 	addi t0, t0, 1 ;; increment by 1 the speed of the game if the speed was 9 or less
 	stw t0, SPEED(zero) ;; store new value of speed
-	
+	ret
+
+;; ---------------------------------------------------------------------------------------------
+;; ---------------------------------------------------------------------------------------------
+
+; BEGIN:change_steps
+change_steps:
+	ldw t0, CURR_STEP(zero) ;; load the current number of steps
+	addi t1, zero, 1 ;; store button4 value
+	beq a0, t1, increment_unit ;; check if should increment units
+l1:
+	beq a1, t1, imcrement_tens ;;check if should increment tens
+l2:
+	beq a2, t1, incremenent_hundreds ;; check if should increment hundreds
+l3: 
+	stw t0, CURR_STEP(zero) ;; store current step incremented
+	ret
+; END:change_steps
+
+increment_unit:
+	addi t0, t0, 1 ;; increment by 1 
+	jmpi l1 ;; return to fct
+increment_tens:
+	addi t0, t0, 10 ;; increment by 10
+	jmpi l2;; return to fct
+increment_hundres:
+	addi t0, t0, 64 ;; incremnet by 100 (hexa:64)
+	jmpi l3 ;; return to fct
+
+;; ---------------------------------------------------------------------------------------------
+;; ---------------------------------------------------------------------------------------------
+; BEGIN:pause_game
+pause_game:
+	ldw t0, PAUSE(zero) ;; load if game is pause or running
+	nor t1, t0, zero ;; nor the value in t0. If it's 0 nor 0 -> then 1, else if 1 nor 0 -> then 0
+	stw t1, PAUSE(zero) ;; store the new value of pause/running
+	ret
+; END:pause_game
 
 font_data:
     .word 0xFC ; 0
