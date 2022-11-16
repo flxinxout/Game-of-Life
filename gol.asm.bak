@@ -80,23 +80,30 @@ get_gsa:
 	add t2, t1, a0  ;; store address for getting the right element
 	ldw v0, 0(t2) ;; load index y from gsa element
 	ret
-; END:get_gsa
 	
 curr_state:
 	addi t1, zero, GSA0 ;; store address of first GSA element
 	add t2, t1, a0 ;; store address for getting the right element
 	ldw v0, 0(t2) ;; load index y from gsa element
 	ret
+; END:get_gsa
 
 ; BEGIN:set_gsa
 set_gsa:
 	ldw t1, GSA_ID(zero) ;; load GSA ID
-	beq zero, t1, curr_state
+	beq zero, t1, curr_state_dd
 	;; if gsa id = 1 meaning we are using next state gsa
 	addi t1, zero, GSA1
 	add t2, t1, a1 ;; store address for getting the right element
 	stw a0, 0(t2) ;; store the line a0 in the GSA element
 	ret
+
+curr_state_dd:
+	addi t1, zero, GSA0 ;; store address of first GSA element
+	add t2, t1, a0 ;; store address for getting the right element
+	ldw v0, 0(t2) ;; load index y from gsa element
+	ret
+
 ; END:set_gsa
 
 ;; ---------------------------------------------------------------------------------------------
@@ -110,12 +117,9 @@ change_speed:
 	addi t1, zero, MIN_SPEED ;; min value of speed
 	blt t1, t0, decrement_really ;; if the speed is greater than 1
 	ret
-; END:change_speed
 
 decrement_really:
-	addi t3, zero, 1
 	addi t0, t0, -1 
-	sub t0, t0, t3 ;; decrease by 1 the speed of the game if the speed was 10 or less
 	stw t0, SPEED(zero) ;; store new value of speed
 	ret
 
@@ -128,7 +132,7 @@ increment_really:
 	addi t0, t0, 1 ;; increment by 1 the speed of the game if the speed was 9 or less
 	stw t0, SPEED(zero) ;; store new value of speed
 	ret
-
+; END:change_speed
 ;; ---------------------------------------------------------------------------------------------
 ;; ---------------------------------------------------------------------------------------------
 
@@ -138,23 +142,24 @@ change_steps:
 	addi t1, zero, 1 ;; store button4 value
 	beq a0, t1, increment_unit ;; check if should increment units
 l1:
-	beq a1, t1, imcrement_tens ;;check if should increment tens
+	beq a1, t1, increment_tens ;;check if should increment tens
 l2:
-	beq a2, t1, incremenent_hundreds ;; check if should increment hundreds
+	beq a2, t1, increment_hundreds ;; check if should increment hundreds
 l3: 
 	stw t0, CURR_STEP(zero) ;; store current step incremented
 	ret
-; END:change_steps
 
 increment_unit:
-	addi t0, t0, 1 ;; increment by 1 
+	addi t0, t0, 0x1 ;; increment by 1 
 	jmpi l1 ;; return to fct
 increment_tens:
-	addi t0, t0, 10 ;; increment by 10
-	jmpi l2;; return to fct
-increment_hundres:
-	addi t0, t0, 64 ;; incremnet by 100 (hexa:64)
+	addi t0, t0, 0x10 ;; increment by 10
+	jmpi l2 ;; return to fct
+increment_hundreds:
+	addi t0, t0, 0x64 ;; increment by 100 (hexa:64)
 	jmpi l3 ;; return to fct
+
+; END:change_steps
 
 ;; ---------------------------------------------------------------------------------------------
 ;; ---------------------------------------------------------------------------------------------
