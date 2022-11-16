@@ -62,28 +62,33 @@ wait:
 	ldw t3, 0(t2) ; load speed of game from memory to t3
 	bne t1, zero, decrement ; if t1 is different than 0 then we loop
 	ret
-; END:wait
 
 decrement:
 	sub t1, t1, t3 ; substract the speed of game from the counter value in t1
 	bne t1, zero, decrement ; if t1 is different than 0 then we loop
+
+; END:wait
 
 ;; ---------------------------------------------------------------------------------------------
 ;; ------------------------------------------------------------------------------------------
 
 ; BEGIN:get_gsa
 get_gsa:
-	ldw t1, GSA_ID(zero) ;; load GSA ID
-	beq zero, t1, curr_state
+	ldw t0, GSA_ID(zero) ;; load GSA ID
+	beq zero, t0, curr_state_0
 	;; if gsa id = 1 meaning we are using next state gsa
-	addi t1, zero, GSA1 ;; store address of first GSA element
-	add t2, t1, a0  ;; store address for getting the right element
+	addi t0, zero, GSA1 ;; store address of first GSA element
+	addi t4, zero, 2
+	sll t3, a0, t4 ;; 4*a0 for the correct word  
+	add t2, t0, t3 ;; store address for getting the right element
 	ldw v0, 0(t2) ;; load index y from gsa element
 	ret
 	
-curr_state:
-	addi t1, zero, GSA0 ;; store address of first GSA element
-	add t2, t1, a0 ;; store address for getting the right element
+curr_state_0:
+	addi t0, zero, GSA0 ;; store address of first GSA element
+	addi t4, zero, 2
+	sll t3, a0, t4 ;; 4*a0 for the correct word  
+	add t2, t0, t3 ;; store address for getting the right element
 	ldw v0, 0(t2) ;; load index y from gsa element
 	ret
 ; END:get_gsa
@@ -170,6 +175,27 @@ pause_game:
 	stw t1, PAUSE(zero) ;; store the new value of pause/running
 	ret
 ; END:pause_game
+
+;; ---------------------------------------------------------------------------------------------
+;; ---------------------------------------------------------------------------------------------
+
+; BEGIN:increment_seed
+increment_seed:
+	ldw t0, SEED(zero) ;; load the current seed of the game
+	ldw t1, CURR_STATE(zero) ;; load the current state of the game
+	beq t1, INIT, increment_seed_init_case ;; if we are in INIT state
+	beq t1, RAND, increment_seed_rand_case ;; if we are in RAND state
+	;; else we are in RUN state what do we do ??
+	ret
+
+increment_seed_init_case:
+	addi t0, t0, 1 ;; increment the seed by 1
+	stw t0, SEED(zero) ;; store new seed
+	ret
+
+increment_seed_rand_case:
+
+; END:increment_seed
 
 font_data:
     .word 0xFC ; 0
