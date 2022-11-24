@@ -27,7 +27,7 @@
     .equ MIN_SPEED, 1
     .equ PAUSED, 0x00
     .equ RUNNING, 0x01
-	.equ COUNTER, 0x7FFF
+	.equ COUNTER, 0x005 ;; 0x7FF
 
 	;; masks
 	.equ 12_DOWNTO_9, 0x000F00
@@ -37,7 +37,15 @@
 
 main:
     ;; TODO
+	addi t0, zero, INIT
+	stw t0, CURR_STATE(zero) ;; INIT
 
+	add t0, zero, zero
+	stw t0, SEED(zero) ;; seed0
+
+	call increment_seed
+
+	
 ;; ---------------------------------------------------------------------------------------------
 ;; ------------------------------------------------------------------------------------------
 
@@ -60,12 +68,13 @@ wait:
 	addi t1, zero, COUNTER ; store value of counter in t1
 	addi t2, zero, SPEED ; store address of speed in t2
 	ldw t3, 0(t2) ; load speed of game from memory to t3
-	bne t1, zero, decrement ; if t1 is different than 0 then we loop
+	blt zero, t1, decrement ; if t1 is greater  than 0 then we loop
 	ret
 
 decrement:
 	sub t1, t1, t3 ; substract the speed of game from the counter value in t1
-	bne t1, zero, decrement ; if t1 is different than 0 then we loop
+	blt zero, t1, decrement ; if t1 is greeater than 0 then we loop
+	ret
 
 ; END:wait
 
@@ -99,14 +108,18 @@ set_gsa:
 	beq zero, t1, curr_state_dd
 	;; if gsa id = 1 meaning we are using next state gsa
 	addi t1, zero, GSA1
+	addi t3, zero, 2
+	sll a1, a1, t3 ;; multiply by 4
 	add t2, t1, a1 ;; store address for getting the right element
 	stw a0, 0(t2) ;; store the line a0 in the GSA element
 	ret
 
 curr_state_dd:
 	addi t1, zero, GSA0 ;; store address of first GSA element
-	add t2, t1, a0 ;; store address for getting the right element
-	ldw v0, 0(t2) ;; load index y from gsa element
+	addi t3, zero, 2
+	sll a1, a1, t3 ;; multiply by 4
+	add t2, t1, a1 ;; store address for getting the right element
+	stw a0, 0(t2) ;; load index y from gsa element
 	ret
 
 ; END:set_gsa
@@ -158,7 +171,7 @@ increment_unit:
 	addi t0, t0, 0x1 ;; increment by 1 
 	jmpi l1 ;; return to fct
 increment_tens:
-	addi t0, t0, 0x10 ;; increment by 10
+	addi t0, t0, 0xA ;; increment by 10
 	jmpi l2 ;; return to fct
 increment_hundreds:
 	addi t0, t0, 0x64 ;; increment by 100 (hexa:64)
@@ -171,9 +184,17 @@ increment_hundreds:
 ; BEGIN:pause_game
 pause_game:
 	ldw t0, PAUSE(zero) ;; load if game is pause or running
-	nor t1, t0, zero ;; nor the value in t0. If it's 0 nor 0 -> then 1, else if 1 nor 0 -> then 0
-	stw t1, PAUSE(zero) ;; store the new value of pause/running
+	andi t2, t0, 1 ;; get the first bit for security
+	beq t2, zero, change_to_1
+	;; change to 0
+	stw zero, PAUSE(zero) ;; store the new value of pause/running
 	ret
+
+change_to_1:
+	addi t2, zero, 1
+	stw t2, PAUSE(zero)
+	ret
+
 ; END:pause_game
 
 ;; ---------------------------------------------------------------------------------------------
@@ -221,36 +242,39 @@ set_pixel:
 	addi t1, zero, LEDS ; load the LEDS in t1
 	addi t3, zero, 1 ;; store the mask for getting the right pixel
 	addi t7, zero, 3 
-	sll t4, a0, t7 ;; multiply the a0 by 8
-	add t4, t4, a1 ;; add the y-coord to the value than we want to shift
-	sll t3, t3, t4 ;; shift the mask from the right value (t4)
+
 
 	blt a0, t0, for_leds_0
 	addi t0, zero, 8
 	blt a0, t0, for_leds_1
 	addi t0, zero, 12
 	blt a0, t0, for_leds_2
+
+store_leds:
+
+	sll t4, a0, t7 ;; multiply the a0 by 8
+	add t4, t4, a1 ;; add the y-coord to the value than we want to shift
+	sll t3, t3, t4 ;; shift the mask from the right value (t4)
+
+	ldw t2, 0(t1) ;; load the LEDS0 in t2 
+	xor t5, t2, t3 ;; invert the correct pixel by and operation 
+	stw t5, 0(t1) ;; store the LEDS0
 	ret
 
 for_leds_2:
+
+	addi a0, a0, -8 ;; re-order the x-coord
 	addi t1, t1, 8 ; add 8
-	ldw t2, 0(t1) ;; load the LEDS2 in t2 
-	xor t5, t2, t3 ;; invert the correct pixel by xor operation
-	stw t5, 0(t1) ;; store the LEDS2
-	ret
+	jmpi store_leds
 
 for_leds_1:
+
+	addi a0, a0, -4 ;; re-order the x-coord
 	addi t1, t1, 4 ; add 4
-	ldw t2, 0(t1) ;; load the LEDS1 in t2 
-	xor t5, t2, t3 ;; invert the correct pixel by xor operation
-	stw t5, 0(t1) ;; store the LEDS1
-	ret
+	jmpi store_leds
 
 for_leds_0:
-	ldw t2, 0(t1) ;; load the LEDS0 in t2 
-	xor t5, t2, t3 ;; invert the correct pixel by xor operation
-	stw t5, 0(t1) ;; store the LEDS0
-	ret
+	jmpi store_leds
 
 ; END:set_pixel
 
@@ -274,7 +298,7 @@ increment_seed_init_case:
 	
 	;; copy the new seed
 
-	addi t2, zero, 8
+	addi t7, zero, 8
 	add t5, zero, zero
 	add t6, zero, zero
 	beq t0, zero, set_seed0
@@ -286,26 +310,69 @@ increment_seed_init_case:
 	beq t0, t3, set_seed3
 
 copy_seed:
-	add a0, zero, t4 ;; store the word in a0 for set gsa
 	add a1, zero, t6 ;; store the y-coord for set gsa
 	call set_gsa
 	addi t6, t6, 1 ;; increment counter
 	addi t5, t5, 4 ;; next word
-	blt t6, t2, copy_seed
+	blt t6, t7, copy_seed
 	ret
 
 set_seed0: 
 	ldw t4, seed0(t5) ;; load the word of seed
-	jmpi copy_seed
+	add a0, zero, t4 ;; store the word in a0 for set gsa
+
+	add a1, zero, t6 ;; store the y-coord for set gsa
+	
+	add s0, zero, ra
+	call set_gsa
+	addi t6, t6, 1 ;; increment counter
+	addi t5, t5, 4 ;; next word
+	blt t6, t7, set_seed0
+	add t0, zero, s0
+	
+	jmp t0
+
 set_seed1:
 	ldw t4, seed1(t5) ;; load the word of seed
-	jmpi copy_seed
+	add a0, zero, t4 ;; store the word in a0 for set gsa
+
+	add a1, zero, t6 ;; store the y-coord for set gsa
+
+	add s0, zero, ra
+	call set_gsa
+	addi t6, t6, 1 ;; increment counter
+	addi t5, t5, 4 ;; next word
+	blt t6, t7, set_seed1
+	add t0, zero, s0
+	
+	jmp t0
+
 set_seed2:
 	ldw t4, seed2(t5) ;; load the word of seed
-	jmpi copy_seed
+	add a0, zero, t4 ;; store the word in a0 for set gsa
+
+	add a1, zero, t6 ;; store the y-coord for set gsa
+	add s0, zero, ra
+	call set_gsa
+	addi t6, t6, 1 ;; increment counter
+	addi t5, t5, 4 ;; next word
+	blt t6, t7, set_seed1
+	add t0, zero, s0
+	
+	jmp t0
+
 set_seed3:
 	ldw t4, seed3(t5) ;; load the word of seed
-	jmpi copy_seed
+	add a0, zero, t4 ;; store the word in a0 for set gsa
+
+	add a1, zero, t6 ;; store the y-coord for set gsa
+	call set_gsa
+	addi t6, t6, 1 ;; increment counter
+	addi t5, t5, 4 ;; next word
+	blt t6, t7, set_seed1
+	add t0, zero, s0
+	
+	jmp t0
 
 increment_seed_rand_case:
 	call random_gsa
