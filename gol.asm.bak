@@ -689,8 +689,174 @@ display_unit:
 
 ; BEGIN:reset_game
 reset_game:
-	ret
+	;; set step at 1
+  	addi t1, zero, 1
+  	stw t1, CURR_STEP(zero)
+  	call decrement_step
+	;; set seed at 0
+  	stw zero, SEED(zero)
+	;; set gsa id 0
+  	stw zero, GSA_ID(zero)
+	;; pause game
+  	addi t1, zero, 1
+	ldw t0, PAUSED(zero)
+  	beq t1, t0, pause_game
+	;; game speed at 1
+  	addi t0, zero, 1
+  	stw t0, SPEED(zero)
+	;; game state to 0 and seed 0 on leds
+  	stw zero, CURR_STATE(zero)
+
+  	addi sp, sp, -4
+  	stw ra, 0(sp)
+  	call draw_gsa ;; diplay seed on leds
+  	jmpi ra_reset
 ; END:reset_game
+
+; BEGIN:get_input
+get_input:
+  	addi t0, zero, BUTTONS
+  	addi t0, t0, 4 
+  	ldw v0, 0(t0)
+  	stw zero, 0(t0)
+	ret
+; END:get_input  
+
+; BEGIN:mask
+mask:  
+  	add t0, zero, zero
+  	;; prepare counter for gsa and mask
+  	addi sp, sp, -12
+  	stw s0, 8(sp)
+  	stw s1, 4(sp)
+  	stw s2, 0(sp)
+  	addi s0, zero, 0 ;; gsa line counter
+  	addi s1, zero, 0 ;; mask counter
+  	addi t5, zero, 7 ;; loop upper bound
+  	;; test which mask must be used
+	ldw s2, SEED(zero)
+  	jmpi check_seed
+
+end_mask:
+  	ldw ra, 0(sp)
+  	addi sp, sp, 4
+  	ldw s2, 0(sp)
+  	addi sp, sp, 4
+  	ldw s1, 0(sp)
+  	addi sp, sp, 4
+  	ldw s0, 0(sp)
+  	addi sp, sp, 4
+  	ret
+
+check_seed:
+  	beq s2, zero, mask_0
+  	addi t0, zero, 1
+
+  	beq s2, t0, mask_1
+  	addi t0, t0, 1
+
+  	beq s2, t0, mask_2
+  	addi t0, t0, 1
+
+  	beq s2, t0, mask_3
+	jmpi mask_4
+  
+mask_0:
+  ldw t0, mask0(s1) ;; load the mask at index s1
+  bge t5, s0, apply_mask ;; while we reach 7 for the gsa elements
+  jmpi end_mask
+
+mask_1:
+
+  ldw t0, mask1(s1) ;; load the mask at index t1
+  bge t5, s0, apply_mask
+  jmpi end_mask
+mask_2:
+
+  ldw t0, mask2(s1) ;; load the mask at index t1
+  bge t5, s0, apply_mask
+  jmpi end_mask
+
+mask_3:
+
+  ldw t0, mask3(s1) ;; load the mask at index t1
+  bge t5, s0, apply_mask
+  jmpi end_mask
+
+mask_4:
+
+  ldw t0, mask4(s1) ;; load the mask at index t1
+  bge t5, s0, apply_mask
+  jmpi end_mask
+  
+apply_mask:
+  	add a0, s0, zero  ;; store in a0 which line should be 
+  	addi sp, sp, -4
+  	stw ra, 0(sp)
+  	call get_gsa   ;; get the t3 gsa element
+
+  	and t0, v0, t0 ;; apply the mask to the gsa element
+  	add a0, t0, zero ;; set line arg for set_gsa
+  	add a1, s0, zero ;; set yth coordintate arg for set_gsa
+
+  	call set_gsa
+
+  	addi s1, s1, 4 ;; increment counter word mask
+  	addi s0, s0, 1 ;; increment counter line gsa
+
+  	;; check which seed it is
+   	jmpi check_seed
+; END:mask
+
+; BEGIN:update_gsa
+update_gsa:
+	ldw t0, PAUSED(zero)
+	beq t0, zero, stop_procedure
+	addi sp, sp, -12
+	stw ra, 8(sp)
+	stw s0, 4(sp)
+	stw s1, 0(sp)
+  	addi s0, zero, 8 ;; counter i from 8
+  	jmpi loop1 ;; if i>=0 loop
+
+stop_procedure:
+	ret
+
+loop1:
+	blt s0, zero, continue_loop1
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ldw s0, 0(sp)
+	addi sp, sp, 4
+	ldw s1, 0(sp)
+	addi sp, sp, 4
+	ret
+
+continue_loop1:  
+  	addi s1, zero, 11
+  	addi a0, s0, 0 ;; set the i coordinate for find_neighbours
+  	bge s1, zero, loop2 ;; iterate on cell of line i
+  
+loop2:
+  	add a1, s1, zero
+  	call find_neighbours
+ 
+  	add a0, v0, zero ;; argument for cell_fate: # of neighbours
+  	add a1, v1, zero ;; argument for cell_fate: cell state
+
+  	call cell_fate
+  
+  	add a0, s1, zero ;;arg for set_pixel: x coordinate
+  	add a1, s0, zero ;;arg for set_pixel: y coordinate 
+
+  	bne v0, v1, set_pixel ;; check if state of cell should be switched
+
+  	addi s1, s1,  -1 ;; decrement counter
+  	bge s1, zero, loop2 ;; if counter >=0 then loop2
+
+	addi s0, s0, -1 ;; decrement counter	
+  	jmpi loop1
+; END:update_gsa
 
 ;; ---------------------------------------------------------------------------------------------
 ;; ---------------------------------------------------------------------------------------------
