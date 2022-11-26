@@ -41,9 +41,8 @@ main:
     ;; TODO
 	addi sp, zero, STACK
 
-	addi a0, zero, 1
-	call select_action
-	
+	call random_gsa
+	call mask
 
 	
 ;; ---------------------------------------------------------------------------------------------
@@ -209,7 +208,7 @@ random_gsa:
 	stw s3, 4(sp)
 	stw ra, 0(sp)
 
-	addi s0, zero, 8 ;; loop for all GSA element
+	addi s0, zero, 8 ;; loop for all GSA element                                RESET TO 8
 	add s1, zero, zero ;; start for the first GSA element
 	jmpi continue_first_loop
 
@@ -224,6 +223,7 @@ continue_first_loop:
 	ldw s1, 0(sp)
 	addi sp, sp, 4
 	ldw s0, 0(sp)
+	addi sp, sp, 4
 	ret
 	
 loop_through_gsa_element:
@@ -242,7 +242,8 @@ set_gsa_pixel:
 	jmpi continue_first_loop
 
 set_pixels_random:
-	ldw t5, RANDOM_NUM(zero) ;; load RANDOM_NUM
+	;ldw t5, RANDOM_NUM(zero) ;; load RANDOM_NUM
+	addi t5, zero, 11
 	andi t4, t5, 1 ;; and mask for getting the random number between 0 and 1
 	or a0, a0, t4 ;; set the last bit to 0 or 1
 
@@ -329,7 +330,7 @@ increment_seed_init_case:
 	
 	;; copy the new seed
 
-	addi t7, zero, 8 ;; RESET TO 8 !!!!
+	addi t7, zero, 8
 	add t5, zero, zero
 	add t6, zero, zero
 	beq t0, zero, set_seed0
@@ -496,41 +497,25 @@ set_alive:
 
 ; BEGIN:find neighbours
 find_neighbours:
+	addi sp, sp, -20
+	stw s0, 16(sp)
+	stw s1, 12(sp)
+	stw s2, 8(sp)
+	stw s3, 4(sp)
+	stw s4, 0(sp)
 	addi t0, zero, LEDS ; load the LEDS in t0
-	addi t1, zero, 4 ;; set value 4
-	addi t3, zero, 1 ;; store the mask for getting the right pixel
-	addi t7, zero, 3 
-	sll t4, a0, t7 ;; multiply the a0 by 8 in t4
-	add t4, t4, a1 ;; add the y-coord to the value than we want to shift
-	sll t3, t3, t4 ;; shift the mask from the right value (t4)
+	ldw s0, 0(t0) ;; load LEDS0
+	addi t0, t0, 4
+	ldw s1, 0(t0) ;; load LEDS1	
+	addi t0, t0, 4
+	ldw s2, 0(t0) ;; load LEDS2
+	addi t0, zero, 3 ;; mod 4 for x
+	sll t0, a0, t0 ;; multiply by 8 a0
+	addi s3, t0, a1 ;; add a1 ;; current number of cell ([0,31]) of some LEDS
+	jmpi start_computation
 
-	blt a0, t1, examine_leds0 ;; if the x-coord is in [0,3]
-	addi t1, zero, 8
-	blt a0, t1, examine_leds1
-	addi t1, zero, 12
-	blt a0, t1, examine_leds2
-	ret
-
-compute_neighbours:
-	and t5, t2, t3 ;; get the correct pixel by and operation with the mask computed before
-	bne t5, zero, alive_cell
-
-alive_cell:
-	
-
-examine_leds0:
-	ldw t2, 0(t0) ;; load the LEDS0 in t2 
-	jmpi compute_neighbours
-
-examine_leds1:
-	addi t0, t0, 4 ; add 4
-	ldw t2, 0(t0) ;; load the LEDS1 in t2 
-	jmpi compute_neighbours
-
-examine_leds2:
-	addi t0, t0, 8 ; add 8
-	ldw t2, 0(t0) ;; load the LEDS2 in t2 
-	jmpi compute_neighbours
+start_computation:
+	addi t0, a0, 1
 
 ; END:find neighbours
 
@@ -709,7 +694,7 @@ reset_game:
 
   	addi sp, sp, -4
   	stw ra, 0(sp)
-  	call draw_gsa ;; diplay seed on leds
+  	;call draw_gsa ;; diplay seed on leds
   	jmpi ra_reset
 ; END:reset_game
 
@@ -726,10 +711,11 @@ get_input:
 mask:  
   	add t0, zero, zero
   	;; prepare counter for gsa and mask
-  	addi sp, sp, -12
-  	stw s0, 8(sp)
-  	stw s1, 4(sp)
-  	stw s2, 0(sp)
+  	addi sp, sp, -16
+  	stw s0, 12(sp)
+  	stw s1, 8(sp)
+  	stw s2, 4(sp)
+	stw s3, 0(sp)
   	addi s0, zero, 0 ;; gsa line counter
   	addi s1, zero, 0 ;; mask counter
   	addi t5, zero, 7 ;; loop upper bound
@@ -740,6 +726,8 @@ mask:
 end_mask:
   	ldw ra, 0(sp)
   	addi sp, sp, 4
+	ldw s3, 0(sp)
+	addi sp, sp, 4
   	ldw s2, 0(sp)
   	addi sp, sp, 4
   	ldw s1, 0(sp)
@@ -762,30 +750,30 @@ check_seed:
 	jmpi mask_4
   
 mask_0:
-  ldw t0, mask0(s1) ;; load the mask at index s1
+  ldw s3, mask0(s1) ;; load the mask at index s1
   bge t5, s0, apply_mask ;; while we reach 7 for the gsa elements
   jmpi end_mask
 
 mask_1:
 
-  ldw t0, mask1(s1) ;; load the mask at index t1
+  ldw s3, mask1(s1) ;; load the mask at index t1
   bge t5, s0, apply_mask
   jmpi end_mask
 mask_2:
 
-  ldw t0, mask2(s1) ;; load the mask at index t1
+  ldw s3, mask2(s1) ;; load the mask at index t1
   bge t5, s0, apply_mask
   jmpi end_mask
 
 mask_3:
 
-  ldw t0, mask3(s1) ;; load the mask at index t1
+  ldw s3, mask3(s1) ;; load the mask at index t1
   bge t5, s0, apply_mask
   jmpi end_mask
 
 mask_4:
 
-  ldw t0, mask4(s1) ;; load the mask at index t1
+  ldw s3, mask4(s1) ;; load the mask at index t1
   bge t5, s0, apply_mask
   jmpi end_mask
   
@@ -795,7 +783,7 @@ apply_mask:
   	stw ra, 0(sp)
   	call get_gsa   ;; get the t3 gsa element
 
-  	and t0, v0, t0 ;; apply the mask to the gsa element
+  	and t0, v0, s3 ;; apply the mask to the gsa element
   	add a0, t0, zero ;; set line arg for set_gsa
   	add a1, s0, zero ;; set yth coordintate arg for set_gsa
 
@@ -812,15 +800,30 @@ apply_mask:
 update_gsa:
 	ldw t0, PAUSED(zero)
 	beq t0, zero, stop_procedure
-	addi sp, sp, -12
-	stw ra, 8(sp)
-	stw s0, 4(sp)
-	stw s1, 0(sp)
+	addi sp, sp, -20
+	stw ra, 16(sp)
+	stw s0, 12(sp)
+	stw s1, 8(sp)
+	stw s2, 4(sp)
   	addi s0, zero, 8 ;; counter i from 8
+	ldw t6, GSA_ID(zero)
+	beq t6, zero, loop_gsa0
+	addi t6, zero, GSA0
+	addi t6, t6, 0x1C
+	ldw t6, 0(t6) ;; load the current gsa element starting from the end
+	stw zero, GSA_ID(zero)
   	jmpi loop1 ;; if i>=0 loop
 
 stop_procedure:
 	ret
+
+loop_gsa0:
+	addi t6, zero, GSA1
+	addi t6, t6, 0x1C
+	ldw t6, 0(t6) ;; load the current gsa element starting from the end
+	addi t7, zero, 1
+	stw t7, GSA_ID(zero)
+	jmpi loop1
 
 loop1:
 	blt s0, zero, continue_loop1
@@ -830,11 +833,13 @@ loop1:
 	addi sp, sp, 4
 	ldw s1, 0(sp)
 	addi sp, sp, 4
+	ldw s2, 0(sp)
+	addi sp, sp, 4
 	ret
 
 continue_loop1:  
-  	addi s1, zero, 11
-  	addi a0, s0, 0 ;; set the i coordinate for find_neighbours
+  	addi s1, zero, 0xB ;; counter for y-coord
+  	add a0, s0, zero ;; set the i coordinate for find_neighbours
   	bge s1, zero, loop2 ;; iterate on cell of line i
   
 loop2:
@@ -849,11 +854,15 @@ loop2:
   	add a0, s1, zero ;;arg for set_pixel: x coordinate
   	add a1, s0, zero ;;arg for set_pixel: y coordinate 
 
-  	bne v0, v1, set_pixel ;; check if state of cell should be switched
+	sll v0, v0, s1 ;; shift result to set it in the right position of gsa element
+	or s2, s2, v0 ;; set in s2
 
   	addi s1, s1,  -1 ;; decrement counter
   	bge s1, zero, loop2 ;; if counter >=0 then loop2
 
+	add a0, zero, s2
+	add a1, zero, s0
+	call set_gsa
 	addi s0, s0, -1 ;; decrement counter	
   	jmpi loop1
 ; END:update_gsa
