@@ -438,6 +438,8 @@ from_rand:
 from_run:
 	andi t7, a0, 8 ;; and the edgecapture with the mask to get the value of the b3
 	bne t7, zero, change_to_init ;; if b3 is pressed, then we go to INIT STATE
+	ldw t0, CURR_STEPS(zero) ;; load the remaining steps
+	beq t0, zero, change_to_init
 	ret
 
 change_to_init:
