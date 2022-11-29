@@ -541,7 +541,7 @@ select_action:
 
 from_init_state:
 
-  	;;CHECK BUTTON PRESSED: b0-b2-b3-b4
+  	;;CHECK BUTTON PRESSED: b0-b2-b3-b4 																			METTRE A0, A1, A2 POUR CHANGE STEPS
 
   	andi t0, a0, 1 ;; mask the a0 for b0
   	bne t0, zero, b0_from_init ;; if b0 is different than 0, then we want to check if it's < N_SEEDS
