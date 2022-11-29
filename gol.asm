@@ -499,25 +499,79 @@ set_alive:
 
 ; BEGIN:find neighbours
 find_neighbours:
-	addi sp, sp, -20
-	stw s0, 16(sp)
-	stw s1, 12(sp)
-	stw s2, 8(sp)
-	stw s3, 4(sp)
-	stw s4, 0(sp)
-	addi t0, zero, LEDS ; load the LEDS in t0
-	ldw s0, 0(t0) ;; load LEDS0
-	addi t0, t0, 4
-	ldw s1, 0(t0) ;; load LEDS1	
-	addi t0, t0, 4
-	ldw s2, 0(t0) ;; load LEDS2
-	addi t0, zero, 3 ;; mod 4 for x
-	sll t0, a0, t0 ;; multiply by 8 a0
-	addi s3, t0, a1 ;; add a1 ;; current number of cell ([0,31]) of some LEDS
-	jmpi start_computation
+	addi sp, sp, -28
+	stw ra, 24(sp)
+	stw s0, 20(sp) ;; counter loop i -1 to 1 for line gsa
+	stw s1, 16(sp) ;; counter loop j -1 to 1 for column gsa
+	stw s2, 12(sp) ;; number of living neighbours
+	stw s5, 8(sp) ;;
+	stw s6, 4(sp) ;; x 
+	stw s7, 0(sp) ;; y
+	;; store RA!!!!
+	
+;; BOUNDS FOR LOOP
+	addi s0, zero, -2
+	addi s1, zero, -2
+	addi s5, zero, 2 ;; fixed value
 
+;; stocke x et y
+	addi s6, zero, a0
+	addi s7, zero, a1
+	add v1, zero, zero
+	
+	jmpi start_computation
+	
 start_computation:
-	addi t0, a0, 1
+	addi s0, s0, 1
+	bge s0, s5, end_computation
+	add a0, s7, s0
+	jmpi mod_8
+
+	call get_gsa
+	jmpi inner_loop 
+	
+	
+inner_loop:
+	addi s1, s1, 1
+	bge s1, s5, start_computation
+	
+	addi t0, s6, s1
+	jmpi mod_12
+	
+	addi t2, zero, 1
+	sll t1, t2, t0 ;; mask to get the correct cell in gsa
+	and t3, v0, t1 ;; apply mask on v0
+	bne t3, zero, add_neighbour
+	jmpi inner_loop
+	
+add_neighbour: 
+	addi s2, s2, 1
+	or t4, s0, s1
+	beq t4, zero, set_v1
+	jmpi inner_loop
+
+set_v1:
+	addi v1, zero, 1 
+	jmpi inner_loop
+
+end_computation:
+	addi v0, s2, zero
+	ldw s7, 0(sp)
+	addi sp, sp, 4
+	ldw s6, 0(sp)
+	addi sp, sp, 4
+	ldw s5, 0(sp)
+	addi sp, sp, 4
+	ldw s2, 0(sp)
+	addi sp, sp, 4
+	ldw s1, 0(sp)
+	addi sp, sp, 4 
+	ldw s0, 0(sp)
+	addi sp, sp, 4
+	ldw ra, 0(sp)
+	ret
+	
+	
 
 ; END:find neighbours
 
@@ -542,18 +596,25 @@ select_action:
 from_init_state:
 
   	;;CHECK BUTTON PRESSED: b0-b2-b3-b4 																			METTRE A0, A1, A2 POUR CHANGE STEPS
+	;; save a0 bc modified during change_steps
+	addi sp, sp, -4
+	stw s0, 0(sp)
+	add s0, a0, zero
 
   	andi t0, a0, 1 ;; mask the a0 for b0
   	bne t0, zero, b0_from_init ;; if b0 is different than 0, then we want to check if it's < N_SEEDS
   
-  	andi t0, a0, 4 ;; mask the a0 for b2
-  	bne t0, zero, b_change_steps ;; if b2 is different than 0, then we want to stay in INIT
+  	andi t0, s0, 4 ;; mask the a0 for b2
+  	bne t0, zero, b2_change_steps ;; if b2 is different than 0, then we want to stay in INIT
   
-  	andi t0, a0, 8  ;; mask the a0 for b3
-  	bne t0, zero, b_change_steps  ;; if b3 is different than 0, then we want to stay in INIT
+  	andi t0, s0, 8  ;; mask the a0 for b3
+  	bne t0, zero, b3_change_steps  ;; if b3 is different than 0, then we want to stay in INIT
 
-  	andi t0, a0, 16  ;; mask the a0 for b4
-  	bne t0, zero, b_change_steps  ;; if b4 is different than 0, then we want to stay in INIT
+  	andi t0, s0, 16  ;; mask the a0 for b4
+  	bne t0, zero, b4_change_steps  ;; if b4 is different than 0, then we want to stay in INIT
+;; test si bon retour ??
+	ldw s0, 0(sp)
+	addi sp, sp, 4
 	ret
 
 	;; CALL FUNCTION FROM INIT STATE
@@ -562,7 +623,24 @@ b0_from_init:
   	call increment_seed ;; else we increment the seed by the rules
 	jmpi ra_reset
 
-b_change_steps:
+b2_change_steps:
+	add a0, zero, zero
+	add a1, zero, zero
+	addi a2, zero, 1 
+	call change_steps
+	jmpi ra_reset
+
+b3_change_steps:
+	add a0, zero, zero
+	add a1, zero, 1
+	add a2, zero, zero 
+	call change_steps
+	jmpi ra_reset
+
+b4_change_steps:
+	addi a0, zero, 1
+	add a1, zero, zero
+	add a2, zero, zero 
 	call change_steps
 	jmpi ra_reset
 
