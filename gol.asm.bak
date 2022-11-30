@@ -37,12 +37,19 @@ main:
     ;; TODO
 	addi sp, zero, CUSTOM_VAR_END
 
-	addi t0, zero, 1
-	stw t0, SEED(zero)
-	call increment_seed
+	call reset_game
+	call get_input
+
+loop_main:
+	call select_action
+	call update_state
+	call update_gsa
+	call mask
 	call draw_gsa
-	call update_gsa
-	call update_gsa
+	call wait
+	call decrement_step
+	call get_input
+	ret	
 
 ; BEGIN:clear_leds
 clear_leds:
@@ -276,8 +283,11 @@ increment_seed:
 	addi t2, zero, RAND
 	beq t1, t2, increment_seed_rand_case ;; if we are in RAND state
 	ret
+	
 
 increment_seed_init_case:
+	addi t7, t7, 4
+	beq s0, t7, end_seed
 	addi s0, s0, 1 ;; increment the seed by 1
 	stw s0, SEED(zero) ;; store new seed
 	
@@ -295,7 +305,7 @@ check_seed_to_go:
 	addi t3, zero, 3
 	beq s0, t3, set_seed3
 	call random_gsa
-	ret
+	jmpi end_seed
 
 continue_increment_seed:
 	add a0, zero, t4 ;; store the word in a0 for set gsa
@@ -313,11 +323,6 @@ end_seed:
 	addi sp, sp, 4
 	ldw s0, 0(sp)
 	addi sp, sp, 4
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
-
-ra_reset:
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
@@ -370,59 +375,48 @@ increment_seed_rand_case:
 	call random_gsa
 	jmpi end_seed
 ; END:increment_seed
-; BEGIN:update_state
-update_state:
-	ldw t0, CURR_STATE(zero) ;; load the current state
-	addi t7, zero, INIT
-	beq t0, t7, from_init ;; if we are in the INIT STATE
-	addi t7, zero, RAND
-	beq t0, t7, from_rand ;; if we are in the RAND STATE
-	addi t7, zero, RUN
-	beq t0, t7, from_run ;; if we are in the RUN STATE
-
-from_init:
-	andi t7, a0, 2 ;; and the edgecapture with the mask to get the value of the b1
-	bne t7, zero, change_to_run ;; if b1 is pressed, then we go to RUN STATE
+; BEGIN:draw_gsa
+draw_gsa:
+	addi sp, sp, -16
+	stw s2, 12(sp) ; store current mask
+	stw ra, 8(sp)
+	stw s0, 4(sp) ; counter for x in element
+	stw s1, 0(sp) ; couner y in all gsa element
 	
-	andi t7, a0, 1 ;; and the edgecapture with the mask to get the value of the b0
-	bne t7, zero, check_if_b0_pressed ;; if b0 is pressed
-	ret
+	addi s1, zero, 8 ; start att gsa number 7 / 8 for convenience
+	jmpi foreach_gsa_el
 
-check_if_b0_pressed:
-	addi t6, zero, 4
-	ldw t4, SEED(zero) ;; load the current seed (0,1,2,3)
-	beq t4, t6, change_to_rand ;; if N = 4
-	ret
+foreach_gsa_el:
+	addi s1, s1, -1 ; decrement y-coord
+	blt s1, zero, finish_draw ; if s1 < 0, then we finish
+	addi s0, zero, 12 ; start at last bit in gsa element / 12 for convenience
+	add a0, zero, s1 ; set y-index for get_gsa
+	call get_gsa ; get in v0 the correct line of gsa element
+	addi s2, zero, 0x1000 ; 1000000000000 / 13 bit for convenient of shift
+	jmpi foreach_bit
 
-from_rand:
-	andi t7, a0, 2 ;; and the edgecapture with the mask to get the value of the b1
-	bne t7, zero, change_to_run ;; if b1 is pressed, then we go to RUN STATE
+foreach_bit:
+	addi s0, s0, -1 ; decrement x-coord
+	blt s0, zero, foreach_gsa_el ; if s0 < 0, then we continue on next gsa elementa
+	srli s2, s2, 1 ; shift to right mask for current bit
+	and t0, v0, s2 ; and the v0 with the mask to know if it's 0 or 1
+	beq t0, zero, foreach_bit ; if 0 we do nothing
+	add a1, zero, s1 ; for set_pixel
+	add a0, zero, s0 ; for set_pixel
+	call set_pixel
+	jmpi foreach_bit ; continue with current gsa element
+			  
+finish_draw:
+	ldw s1, 0(sp)
+	addi sp, sp, 4
+	ldw s0, 0(sp)
+	addi sp, sp, 4
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ldw s2, 0(sp)
+	addi sp, sp, 4
 	ret
-
-from_run:
-	andi t7, a0, 8 ;; and the edgecapture with the mask to get the value of the b3
-	bne t7, zero, change_to_init ;; if b3 is pressed, then we go to INIT STATE
-	ldw t0, CURR_STEP(zero) ;; load the remaining steps
-	beq t0, zero, change_to_init
-	ret
-
-change_to_init:
-	addi t7, zero, INIT
-	stw t7, CURR_STATE(zero) ;; store the new current state
-	call reset_game
-	ret
-
-change_to_run:
-	addi t7, zero, RUN
-	stw t7, CURR_STATE(zero) ;; store the new current state
-	ret
-
-change_to_rand:
-	addi t7, zero, RAND
-	stw t7, CURR_STATE(zero) ;; store the new current state
-	ret
-
-; END:update_state
+; END:draw_gsa
 ; BEGIN:cell_fate
 cell_fate:
 	beq a1, zero, check_if_dead_has_to_become_alive 
@@ -453,7 +447,7 @@ set_alive:
 	ret
 
 ; END:cell_fate
-; BEGIN:find neighbours
+; BEGIN:find_neighbours
 find_neighbours:
 	addi sp, sp, -28
 	stw ra, 24(sp)
@@ -464,15 +458,14 @@ find_neighbours:
 	stw s6, 4(sp) ;; x 
 	stw s7, 0(sp) ;; y
 	
-	addi s0, zero, -2
-	addi s1, zero, -2
+	addi s0, zero, -2 ; 
+	addi s1, zero, -2 ; 
 	addi s5, zero, 2 ;; fixed value
 
 ;; stocke x et y
 	add s6, zero, a0
 	add s7, zero, a1
 	add v1, zero, zero
-	jmpi start_computation
 	
 start_computation:
 	addi s0, s0, 1
@@ -481,12 +474,11 @@ start_computation:
 	andi a0, a0, 7 ; mod 8
 
 	call get_gsa
-	jmpi inner_loop 
+	addi s1, zero, -2 ; reset value of s1 for x-coord
 	
 inner_loop:
 	addi s1, s1, 1
 	bge s1, s5, start_computation
-	
 	add t0, s6, s1
 	jmpi mod_12
 	
@@ -533,13 +525,13 @@ mod_12:
 	jmpi continue_inner_loop
 
 map_to_0:
-	addi t0, zero, 0
+	add t0, zero, zero
 	jmpi continue_inner_loop
 
 map_to_11:
 	addi t0, zero, 11
 	jmpi continue_inner_loop
-; END:find neighbours
+; END:find_neighbours
 ; BEGIN:select_action
 select_action:
 	addi sp, sp, -4
@@ -584,7 +576,7 @@ end_action:
 
 b0_from_init:
   	call increment_seed ;; else we increment the seed by the rules
-	jmpi ra_reset
+	jmpi end_action
 
 b2_change_steps:
 	add a0, zero, zero
@@ -621,21 +613,29 @@ from_run_state:
 
   	andi t0, a0, 16
   	bne t0, zero, random_gsa
-	jmpi ra_reset
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 
 b_pause_game:
 	call pause_game
-	jmpi ra_reset
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 
 b1_from_run:
   	add a0, zero, zero
   	call change_speed
-	jmpi ra_reset
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 
 b2_from_run:
   	addi a0, zero, 1
   	call change_speed
-	jmpi ra_reset
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
   
 from_rand_state:
 	addi sp, sp, -4
@@ -658,98 +658,101 @@ from_rand_state:
 ; END:select_action
 ; BEGIN:decrement_step
 decrement_step:
-  	addi sp, sp, -12
-  	stw ra, 8(sp)
-  	stw s1, 4(sp) ; counter of loop
-  	stw s2, 0(sp) ; current mask
+  	addi sp, sp, -8
+  	stw ra, 4(sp)
+  	stw s1, 0(sp) ; counter of loop
+	
+	addi t2, zero, SEVEN_SEGS
+	addi t7, zero, 0xF00 ; maska
+	slli t7, t7, 4
+	addi s1, zero, 3 ; counter
 
+	ldw t1, CURR_STATE(zero)
+	addi t4, zero, RUN
+	add v0, zero, zero
+	bne t1, t4, assign_segment ;; if not in run state (avoid decrementing)
+
+  	ldw t1, PAUSE(zero)
+	bne t1, zero, display_segments
+	jmpi assign_segment
+
+display_segments:
+;; case where not paused
 	ldw t0, CURR_STEP(zero)
-	ldw t2, CURR_STATE(zero)
-  	addi t1, zero, RUN
-	bne t2, t1, display_segments_1
+	bne t0, zero, decrement_really_2
+	addi v0, zero, 1
+	jmpi assign_segment
 
+decrement_really_2:
+	addi t0, t0, -1 ; decrease if in run state
+	add v0, v0, zero
 
-display_segments_1:
-  	ldw t2, PAUSE(zero)
-	addi t3, zero, SEVEN_SEGS
-	addi s2, zero, 0xF000 ; mask
-	addi s1, zero, 4 ; counter
-	beq t2, zero, display_segments_2
-	addi t0, t0, -1 ; decrease
+assign_segment:
+	and t1, t0, t7
+	slli t3, s1, 2 ;; index *4
+	addi t3	, t3, -2 ;; to get the right address for font data we have to sub 2 before shifting (avoid doing 2 shifts)
+	srl t1, t1, t3 ;; number in font data containing the right 'digit' 0-F
 
-display_segments_2:
-  	stw t0, CURR_STEP(zero)
-	jmpi display_0
-	; end
+	ldw t4, font_data(t1) ;; get in t4 the value of the correct char to store in seven seg display
+	stw t4, 0(t2)
+	addi t2, t2, 4
+	srli t7, t7, 4 ;; shift the mask by 4 bits
 	
-display_0:
-	and t1, t0, s2
-	srli t1, t1, 10
-	ldw t1, font_data(t1)
-	stw t1, 0(t3)
-	srli s2, s2, 4
-	
-display_1:
-	and t1, t0, s2
-	srli t1, t1, 6
-	ldw t1, font_data(t1)
-	addi t3, t3, 4
-	stw t1, 0(t3)
-	srli s2, s2, 4
+	addi s1, s1, -1
+	bge s1, zero, assign_segment
+	jmpi reset_stack
 
-display_2:
-	and t1, t0, s2
-	srli t1, t1, 2
-	ldw t1, font_data(t1)
-	addi t3, t3, 4
-	stw t1, 0(t3)
-	srli s2, s2, 4
-
-display_3:
-	and t1, t0, s2
-	slli, t1, t1, 2
-	ldw t1, font_data(t1)
-	addi t3, t3, 4
-	stw t1, 0(t3)
- 	srli s2, s2, 4
 
 reset_stack:
-  	ldw s2, 0(sp)
-  	addi sp, sp, 4
   	ldw s1, 0(sp)
   	addi sp, sp, 4
   	ldw ra, 0(sp)
   	addi sp, sp, 4
 	ret
 
-end_game:
-  	addi v0, zero, 1
-	jmpi reset_stack
 ; END:decrement_step
 ; BEGIN:reset_game
 reset_game:
 	addi sp, sp, -4
   	stw ra, 0(sp)
 	;; set step at 1
-  	addi t1, zero, 1
-  	stw t1, CURR_STEP(zero)
-  	call decrement_step
-	;; set seed at 0
-  	stw zero, SEED(zero)
-	;; set gsa id 0
-  	stw zero, GSA_ID(zero)
-	;; pause game
-  	addi t1, zero, 1
-	ldw t0, PAUSED(zero)
-  	beq t1, t0, pause_game
-	;; game speed at 1
-  	addi t0, zero, 1
-  	stw t0, SPEED(zero)
+	call clear_leds
 	;; game state to 0 and seed 0 on leds
   	stw zero, CURR_STATE(zero)
 
+  	addi t1, zero, 1
+  	stw t1, CURR_STEP(zero)
+
+	addi t2, zero, SEVEN_SEGS
+	stw zero, 0(t2)
+	addi t2, t2, 4
+	stw zero, 0(t2)
+	addi t2, t2, 4
+	stw zero, 0(t2)
+	addi t2, t2, 4
+	ldw t3, font_data+4(zero)
+	stw t3, 0(t2)
+
+	;; set seed at -1
+	addi t0, zero, -1
+  	stw t0, SEED(zero)
+	;; set gsa id 0
+  	stw zero, GSA_ID(zero)
+
+	call increment_seed
+
+	;; pause game
+	stw zero, PAUSE(zero)
+next_t:
+	;; game speed at 1
+  	addi t0, zero, MIN_SPEED
+  	stw t0, SPEED(zero)
+
   	call draw_gsa ;; diplay seed on leds
-  	jmpi ra_reset
+  	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
+
 ; END:reset_game
 ; BEGIN:get_input
 get_input:
@@ -849,7 +852,7 @@ update_gsa:
 	stw s0, 8(sp)
 	stw s1, 4(sp)
 	stw s2, 0(sp)
-  	addi s0, zero, 8 ;; counter i from 8
+  	addi s0, zero, 7 ;; counter i from 8
 	ldw t6, GSA_ID(zero)
 	beq t6, zero, loop_gsa0
 	addi t6, zero, GSA0
@@ -870,7 +873,7 @@ loop_gsa0:
 	jmpi loop1
 
 loop1:
-	blt s0, zero, continue_loop1
+	bge s0, zero, continue_loop1
 	ldw s2, 0(sp)
 	addi sp, sp, 4
 	ldw s1, 0(sp)
@@ -883,11 +886,11 @@ loop1:
 
 continue_loop1:  
   	addi s1, zero, 0xB ;; counter for y-coord
-  	add a0, s0, zero ;; set the i coordinate for find_neighbours
+  	add a0, s1, zero ;; set the i coordinate for find_neighbours
   	bge s1, zero, loop2 ;; iterate on cell of line i
   
 loop2:
-  	add a1, s1, zero
+  	add a1, s0, zero
   	call find_neighbours
  
   	add a0, v0, zero ;; argument for cell_fate: # of neighbours
@@ -910,48 +913,65 @@ loop2:
 	addi s0, s0, -1 ;; decrement counter	
   	jmpi loop1
 ; END:update_gsa
-; BEGIN:draw_gsa
-draw_gsa:
-	addi sp, sp, -16
-	stw s2, 12(sp) ; store current mask
-	stw ra, 8(sp)
-	stw s0, 4(sp) ; counter for x in element
-	stw s1, 0(sp) ; couner y in all gsa element
+; BEGIN:update_state
+update_state:	
+	ldw t0, CURR_STATE(zero) ;; load the current state
+	addi t7, zero, INIT
+	beq t0, t7, from_init ;; if we are in the INIT STATE
+	addi t7, zero, RAND
+	beq t0, t7, from_rand ;; if we are in the RAND STATE
+	addi t7, zero, RUN
+	beq t0, t7, from_run ;; if we are in the RUN STATE
+
+from_init:
+	andi t7, a0, 2 ;; and the edgecapture with the mask to get the value of the b1
+	bne t7, zero, change_to_run ;; if b1 is pressed, then we go to RUN STATE
 	
-	addi s1, zero, 8 ; start att gsa number 7 / 8 for convenience
-	jmpi foreach_gsa_el
+	andi t7, a0, 1 ;; and the edgecapture with the mask to get the value of the b0
+	bne t7, zero, check_if_b0_pressed ;; if b0 is pressed
+	ret
 
-foreach_gsa_el:
-	addi s1, s1, -1 ; decrement y-coord
-	blt s1, zero, finish_draw ; if s1 < 0, then we finish
-	addi s0, zero, 12 ; start at last bit in gsa element / 12 for convenience
-	add a0, zero, s1 ; set y-index for get_gsa
-	call get_gsa ; get in v0 the correct line of gsa element
-	addi s2, zero, 0x1000 ; 1000000000000 / 13 bit for convenient of shift
-	jmpi foreach_bit
+check_if_b0_pressed:
+	addi t6, zero, 4
+	ldw t4, SEED(zero) ;; load the current seed (0,1,2,3)
+	beq t4, t6, change_to_rand ;; if N = 4
+	ret
 
-foreach_bit:
-	addi s0, s0, -1 ; decrement x-coord
-	blt s0, zero, foreach_gsa_el ; if s0 < 0, then we continue on next gsa elementa
-	srli s2, s2, 1 ; shift to right mask for current bit
-	and t0, v0, s2 ; and the v0 with the mask to know if it's 0 or 1
-	beq t0, zero, foreach_bit ; if 0 we do nothing
-	add a1, zero, s1 ; for set_pixel
-	add a0, zero, s0 ; for set_pixel
-	call set_pixel
-	jmpi foreach_bit ; continue with current gsa element
-			  
-finish_draw:
-	ldw s1, 0(sp)
-	addi sp, sp, 4
-	ldw s0, 0(sp)
-	addi sp, sp, 4
+from_rand:
+	andi t7, a0, 2 ;; and the edgecapture with the mask to get the value of the b1
+	bne t7, zero, change_to_run ;; if b1 is pressed, then we go to RUN STATE
+	ret
+
+from_run:
+	andi t7, a0, 8 ;; and the edgecapture with the mask to get the value of the b3
+	bne t7, zero, change_to_init ;; if b3 is pressed, then we go to INIT STATE
+	ldw t0, CURR_STEP(zero) ;; load the remaining steps
+	beq t0, zero, change_to_init
+	ret
+
+change_to_init:
+	addi t7, zero, INIT
+	stw t7, CURR_STATE(zero) ;; store the new current state
+	addi sp, sp, -4
+	stw ra, 0(sp)
+	call reset_game
 	ldw ra, 0(sp)
 	addi sp, sp, 4
-	ldw s2, 0(sp)
-	addi sp, sp, 4
 	ret
-; END:draw_gsa
+
+change_to_run:
+	addi t7, zero, RUN
+	stw t7, CURR_STATE(zero) ;; store the new current state
+	addi t7, zero, 1
+	stw t7, PAUSE(zero)
+	ret
+
+change_to_rand:
+	addi t7, zero, RAND
+	stw t7, CURR_STATE(zero) ;; store the new current state
+	ret
+
+; END:update_state
 
 
 font_data:
