@@ -36,8 +36,7 @@
 main:
     ;; TODO
 	addi sp, zero, CUSTOM_VAR_END
-	addi t0, zero, 2
-	stw t0, SEED(zero)
+	
 
 ; BEGIN:clear_leds
 clear_leds:
@@ -454,6 +453,7 @@ find_neighbours:
 ;; stocke x et y
 	add s6, zero, a0
 	add s7, zero, a1
+	add s2, zero, zero
 	add v1, zero, zero
 	
 start_computation:

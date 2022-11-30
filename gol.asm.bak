@@ -36,28 +36,6 @@
 main:
     ;; TODO
 	addi sp, zero, CUSTOM_VAR_END
-	addi s7, zero, 0
-
-	call reset_game
-	call get_input
-
-loop_main:
-	add a0, v0, zero
-	;addi a0, zero, 1
-	;addi t0, zero, BUTTONS
-	;addi t0, t0, 4
-	;stw a0, 0(t0)
-	call select_action
-	call update_state
-	call update_gsa
-	call mask
-	call draw_gsa
-	call wait
-	call decrement_step
-	add s7, v0, zero
-	call get_input
-	beq s7, zero, loop_main
-	jmpi main
 	
 
 ; BEGIN:clear_leds
@@ -475,6 +453,7 @@ find_neighbours:
 ;; stocke x et y
 	add s6, zero, a0
 	add s7, zero, a1
+	add s2, zero, zero
 	add v1, zero, zero
 	
 start_computation:
@@ -930,7 +909,7 @@ end_gsa_get:
 continue_loop1:  
   	addi s1, zero, 0xB ;; counter for x-coord
   	add a0, s1, zero ;; set the i coordinate for find_neighbours
-  	bge s1, zero, loop2 ;; iterate on cell of line i
+  	bge s1, zero, loop2 ;; iterate on cell of line 
   
 loop2:
   	add a1, s0, zero
