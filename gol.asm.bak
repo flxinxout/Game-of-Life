@@ -27,7 +27,7 @@
     .equ MIN_SPEED, 1
     .equ PAUSED, 0x00
     .equ RUNNING, 0x01
-	.equ COUNTER, 0x005 ;; 0x7FF
+	.equ COUNTER, 0x7FF
 
 	;; masks
 	.equ 12_DOWNTO_9, 0x000F00
@@ -36,11 +36,18 @@
 main:
     ;; TODO
 	addi sp, zero, CUSTOM_VAR_END
+	addi sp, sp, -4
+	stw s7, 0(sp) ; done
 
 	call reset_game
 	call get_input
 
 loop_main:
+	add a0, v0, zero
+	;addi a0, zero, 1
+	;addi t0, zero, BUTTONS
+	;addi t0, t0, 4
+	;stw a0, 0(t0)
 	call select_action
 	call update_state
 	call update_gsa
@@ -48,8 +55,12 @@ loop_main:
 	call draw_gsa
 	call wait
 	call decrement_step
+	add s7, v0, zero
 	call get_input
-	ret	
+	beq s7, zero, loop_main
+	ldw s7, 0(sp) ; done
+	addi sp, sp, 4
+	jmpi main
 
 ; BEGIN:clear_leds
 clear_leds:
@@ -383,6 +394,7 @@ draw_gsa:
 	stw s0, 4(sp) ; counter for x in element
 	stw s1, 0(sp) ; couner y in all gsa element
 	
+	call clear_leds
 	addi s1, zero, 8 ; start att gsa number 7 / 8 for convenience
 	jmpi foreach_gsa_el
 
@@ -534,8 +546,9 @@ map_to_11:
 ; END:find_neighbours
 ; BEGIN:select_action
 select_action:
-	addi sp, sp, -4
-	stw ra, 0(sp)
+	addi sp, sp, -8
+	stw ra, 4(sp)
+	stw s0, 0(sp)
   	ldw t0, CURR_STATE(zero) ;; load the current state in t0
 
   	addi t1, zero, INIT
@@ -549,8 +562,6 @@ select_action:
 	ret
 
 from_init_state:
-	addi sp, sp, -4
-	stw s0, 0(sp)
   	;;CHECK BUTTON PRESSED: b0-b2-b3-b4
 	add s0, a0, zero
 
@@ -568,6 +579,7 @@ from_init_state:
 	jmpi end_action
 
 end_action:
+	add a0, s0, zero
 	ldw s0, 0(sp)
 	addi sp, sp, 4
 	ldw ra, 0(sp)	
@@ -589,7 +601,7 @@ b3_change_steps:
 	add a0, zero, zero
 	addi a1, zero, 1
 	add a2, zero, zero 
-	call change_steps
+	call change_steps	
 	jmpi end_action
 
 b4_change_steps:
@@ -619,27 +631,19 @@ from_run_state:
 
 b_pause_game:
 	call pause_game
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
+	jmpi end_action
 
 b1_from_run:
   	add a0, zero, zero
   	call change_speed
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
+	jmpi end_action
 
 b2_from_run:
   	addi a0, zero, 1
   	call change_speed
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
+	jmpi end_action
   
 from_rand_state:
-	addi sp, sp, -4
-	stw s0, 0(sp)
 	add s0, a0, zero
   	;;CHECK BUTTON PRESSED: b0-b1-b2-b3-b4
 
@@ -654,6 +658,7 @@ from_rand_state:
 
 	andi t0, a0, 1
   	bne t0, zero, random_gsa
+	
 	jmpi end_action
 ; END:select_action
 ; BEGIN:decrement_step
@@ -713,8 +718,14 @@ reset_stack:
 ; END:decrement_step
 ; BEGIN:reset_game
 reset_game:
-	addi sp, sp, -4
-  	stw ra, 0(sp)
+	addi sp, sp, -12
+  	stw ra, 8(sp)
+	stw s1, 4(sp)
+	stw s2, 0(sp)
+
+	add s1, zero, zero
+	add s2, zero, zero
+	addi t7, zero, 8
 	;; set step at 1
 	call clear_leds
 	;; game state to 0 and seed 0 on leds
@@ -724,34 +735,50 @@ reset_game:
   	stw t1, CURR_STEP(zero)
 
 	addi t2, zero, SEVEN_SEGS
-	stw zero, 0(t2)
+	ldw t3, font_data+4(zero)
+	stw t3, 0(t2)
 	addi t2, t2, 4
-	stw zero, 0(t2)
+	stw t3, 0(t2)
 	addi t2, t2, 4
-	stw zero, 0(t2)
+	stw t3, 0(t2)
 	addi t2, t2, 4
 	ldw t3, font_data+4(zero)
 	stw t3, 0(t2)
 
-	;; set seed at -1
-	addi t0, zero, -1
-  	stw t0, SEED(zero)
+  	stw zero, SEED(zero)
 	;; set gsa id 0
   	stw zero, GSA_ID(zero)
 
-	call increment_seed
+	;---- display
+display_seed_0:
+	jmpi set_seed0_2
 
+continue_reset:
 	;; pause game
 	stw zero, PAUSE(zero)
-next_t:
 	;; game speed at 1
   	addi t0, zero, MIN_SPEED
   	stw t0, SPEED(zero)
 
   	call draw_gsa ;; diplay seed on leds
+	ldw s2, 0(sp)
+	addi sp, sp, 4
+	ldw s1, 0(sp)
+	addi sp, sp, 4
   	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
+
+set_seed0_2: 
+	ldw t4, seed0(s1) ;; load the word of seed
+	add a0, zero, t4 ;; store the word in a0 for set gsa
+	add a1, zero, s2 ;; store the y-coord for set gsa with t6
+
+	call set_gsa
+	addi s2, s2, 1 ;; increment counter
+	addi s1, s1, 4 ;; next word
+	blt s2, t7, set_seed0_2
+	jmpi continue_reset
 
 ; END:reset_game
 ; BEGIN:get_input
