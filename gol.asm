@@ -36,31 +36,8 @@
 main:
     ;; TODO
 	addi sp, zero, CUSTOM_VAR_END
-	addi sp, sp, -4
-	stw s7, 0(sp) ; done
-
-	call reset_game
-	call get_input
-
-loop_main:
-	add a0, v0, zero
-	;addi a0, zero, 1
-	;addi t0, zero, BUTTONS
-	;addi t0, t0, 4
-	;stw a0, 0(t0)
-	call select_action
-	call update_state
-	call update_gsa
-	call mask
-	call draw_gsa
-	call wait
-	call decrement_step
-	add s7, v0, zero
-	call get_input
-	beq s7, zero, loop_main
-	ldw s7, 0(sp) ; done
-	addi sp, sp, 4
-	jmpi main
+	addi t0, zero, 2
+	stw t0, SEED(zero)
 
 ; BEGIN:clear_leds
 clear_leds:
@@ -508,24 +485,25 @@ add_neighbour:
 	jmpi inner_loop
 
 set_v1:
-	addi v1, zero, 1 
+	addi v1, zero, 1
+	addi s2, s2, -1
 	jmpi inner_loop
 
 end_computation:
 	add v0, s2, zero
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ldw s0, 0(sp)
-	addi sp, sp, 4
-	ldw s1, 0(sp)
-	addi sp, sp, 4 
-	ldw s2, 0(sp)
-	addi sp, sp, 4
-	ldw s5, 0(sp)
+	ldw s7, 0(sp)
 	addi sp, sp, 4
 	ldw s6, 0(sp)
 	addi sp, sp, 4
-	ldw s7, 0(sp)
+	ldw s5, 0(sp)
+	addi sp, sp, 4 
+	ldw s2, 0(sp)
+	addi sp, sp, 4
+	ldw s1, 0(sp)
+	addi sp, sp, 4
+	ldw s0, 0(sp)
+	addi sp, sp, 4
+	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
 
@@ -678,12 +656,12 @@ decrement_step:
 	bne t1, t4, assign_segment ;; if not in run state (avoid decrementing)
 
   	ldw t1, PAUSE(zero)
+	ldw t0, CURR_STEP(zero)
 	bne t1, zero, display_segments
 	jmpi assign_segment
 
 display_segments:
 ;; case where not paused
-	ldw t0, CURR_STEP(zero)
 	bne t0, zero, decrement_really_2
 	addi v0, zero, 1
 	jmpi assign_segment
@@ -692,12 +670,18 @@ decrement_really_2:
 	addi t0, t0, -1 ; decrease if in run state
 	add v0, v0, zero
 
+last_segment:
+	slli t1, t1, 2
+	jmpi continue_segment
+
 assign_segment:
 	and t1, t0, t7
+	beq s1, zero, last_segment
 	slli t3, s1, 2 ;; index *4
 	addi t3	, t3, -2 ;; to get the right address for font data we have to sub 2 before shifting (avoid doing 2 shifts)
 	srl t1, t1, t3 ;; number in font data containing the right 'digit' 0-F
 
+continue_segment:
 	ldw t4, font_data(t1) ;; get in t4 the value of the correct char to store in seven seg display
 	stw t4, 0(t2)
 	addi t2, t2, 4
@@ -718,16 +702,17 @@ reset_stack:
 ; END:decrement_step
 ; BEGIN:reset_game
 reset_game:
-	addi sp, sp, -12
-  	stw ra, 8(sp)
-	stw s1, 4(sp)
-	stw s2, 0(sp)
+	addi sp, sp, -16
+  	stw ra, 12(sp)
+	stw s1, 8(sp)
+	stw s2, 4(sp)
+	stw s3, 0(sp)
 
 	add s1, zero, zero
 	add s2, zero, zero
+	add s3, zero, zero
 	addi t7, zero, 8
-	;; set step at 1
-	call clear_leds
+
 	;; game state to 0 and seed 0 on leds
   	stw zero, CURR_STATE(zero)
 
@@ -735,7 +720,7 @@ reset_game:
   	stw t1, CURR_STEP(zero)
 
 	addi t2, zero, SEVEN_SEGS
-	ldw t3, font_data+4(zero)
+	ldw t3, font_data+0(zero)
 	stw t3, 0(t2)
 	addi t2, t2, 4
 	stw t3, 0(t2)
@@ -761,6 +746,8 @@ continue_reset:
   	stw t0, SPEED(zero)
 
   	call draw_gsa ;; diplay seed on leds
+	ldw s3, 0(sp)
+	addi sp, sp, 4
 	ldw s2, 0(sp)
 	addi sp, sp, 4
 	ldw s1, 0(sp)
@@ -771,12 +758,15 @@ continue_reset:
 
 set_seed0_2: 
 	ldw t4, seed0(s1) ;; load the word of seed
+	ldw t5, mask0(s3)
+	and t4, t4, t5 ;; apply mask
 	add a0, zero, t4 ;; store the word in a0 for set gsa
 	add a1, zero, s2 ;; store the y-coord for set gsa with t6
 
 	call set_gsa
 	addi s2, s2, 1 ;; increment counter
 	addi s1, s1, 4 ;; next word
+	addi s3, s3, 4 ;; next mask
 	blt s2, t7, set_seed0_2
 	jmpi continue_reset
 
@@ -876,31 +866,36 @@ update_gsa:
 	beq t0, zero, stop_procedure
 	addi sp, sp, -16
 	stw ra, 12(sp)
-	stw s0, 8(sp)
-	stw s1, 4(sp)
-	stw s2, 0(sp)
-  	addi s0, zero, 7 ;; counter i from 8
-	ldw t6, GSA_ID(zero)
-	beq t6, zero, loop_gsa0
-	addi t6, zero, GSA0
-	addi t6, t6, 0x1C
-	ldw t6, 0(t6) ;; load the current gsa element starting from the end
-	stw zero, GSA_ID(zero)
+	stw s0, 8(sp) ; y-coord
+	stw s1, 4(sp) ; x-coord
+	stw s2, 0(sp) ; current line that we compute
+
+	add s2, zero, zero
+  	addi s0, zero, 7 ;; counter i from 7
   	jmpi loop1 ;; if i>=0 loop
 
 stop_procedure:
 	ret
 
-loop_gsa0:
-	addi t6, zero, GSA1
-	addi t6, t6, 0x1C
-	ldw t6, 0(t6) ;; load the current gsa element starting from the end
-	addi t7, zero, 1
-	stw t7, GSA_ID(zero)
-	jmpi loop1
-
 loop1:
 	bge s0, zero, continue_loop1
+	ldw t0, GSA_ID(zero)
+	xori t0, t0, 1
+	stw t0, GSA_ID(zero)
+	add s0, zero, zero
+	addi t7, zero, 8
+
+pop_gsa:
+	ldw s2, 0(sp)
+	addi sp, sp, 4
+	add a0, s2, zero
+	add a1, zero, s0
+	call set_gsa
+	addi s0, s0, 1
+	blt s0, t7, pop_gsa
+	jmpi end_gsa_get
+
+end_gsa_get:
 	ldw s2, 0(sp)
 	addi sp, sp, 4
 	ldw s1, 0(sp)
@@ -912,12 +907,13 @@ loop1:
 	ret
 
 continue_loop1:  
-  	addi s1, zero, 0xB ;; counter for y-coord
+  	addi s1, zero, 0xB ;; counter for x-coord
   	add a0, s1, zero ;; set the i coordinate for find_neighbours
-  	bge s1, zero, loop2 ;; iterate on cell of line i
+  	bge s1, zero, loop2 ;; iterate on cell of line 
   
 loop2:
   	add a1, s0, zero
+	add a0, s1, zero
   	call find_neighbours
  
   	add a0, v0, zero ;; argument for cell_fate: # of neighbours
@@ -931,14 +927,15 @@ loop2:
 	sll v0, v0, s1 ;; shift result to set it in the right position of gsa element
 	or s2, s2, v0 ;; set in s2
 
-  	addi s1, s1,  -1 ;; decrement counter
+  	addi s1, s1, -1 ;; decrement counter
   	bge s1, zero, loop2 ;; if counter >=0 then loop2
 
-	add a0, zero, s2
-	add a1, zero, s0
-	call set_gsa
+	addi sp, sp, -4
+	stw s2, 0(sp)
+	add s2, zero, zero
 	addi s0, s0, -1 ;; decrement counter	
   	jmpi loop1
+
 ; END:update_gsa
 ; BEGIN:update_state
 update_state:	
